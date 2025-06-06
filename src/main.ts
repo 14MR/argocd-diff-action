@@ -113,6 +113,7 @@ export async function run(): Promise<void> {
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let responseJson: any;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let response: any;
     try {
       const requestHeaders = { Cookie: `argocd.token=${ARGOCD_TOKEN}` };
@@ -318,23 +319,51 @@ _Updated at ${new Date().toLocaleString('en-US', { timeZone: 'America/Los_Angele
   const apps = await getApps();
   core.info(`Found apps: ${apps.map(a => a.metadata.name).join(', ')}`);
 
+  // Log detailed info about each app
+  for (const app of apps) {
+    core.info(`App: ${app.metadata.name}`);
+    core.info(`  - Source path: ${app.spec.source.path}`);
+    core.info(`  - Repo URL: ${app.spec.source.repoURL}`);
+    core.info(`  - Target revision: ${app.spec.source.targetRevision}`);
+    core.info(`  - Sync status: ${app.status.sync.status}`);
+  }
+
   const diffs: Diff[] = [];
 
-  await asyncForEach(apps, async app => {
+  await asyncForEach(apps, async (app, index) => {
     const command = `app diff ${app.metadata.name} --local=${app.spec.source.path}`;
     try {
-      core.info(`Running: argocd ${command}`);
+      core.info(`[${index + 1}/${apps.length}] Processing app: ${app.metadata.name}`);
+      core.info(`[${index + 1}/${apps.length}] Running: argocd ${command}`);
+      core.info(`[${index + 1}/${apps.length}] Local path: ${app.spec.source.path}`);
+
       // ArgoCD app diff will exit 1 if there is a diff, so always catch,
       // and then consider it a success if there's a diff in stdout
       // https://github.com/argoproj/argo-cd/issues/3588
       await argocd(command);
+      core.info(`[${index + 1}/${apps.length}] Success for ${app.metadata.name}: No diff found`);
+      diffs.push({ app, diff: '' });
     } catch (e) {
       const res = e as ExecResult;
-      core.info(`stdout: ${res.stdout}`);
-      core.info(`stderr: ${res.stderr}`);
+      core.info(`[${index + 1}/${apps.length}] Command failed for app: ${app.metadata.name}`);
+      core.info(`[${index + 1}/${apps.length}] stdout: ${res.stdout}`);
+      core.info(`[${index + 1}/${apps.length}] stderr: ${res.stderr}`);
+
+      if (res.err) {
+        core.info(`[${index + 1}/${apps.length}] Error details: ${JSON.stringify(res.err)}`);
+        core.info(`[${index + 1}/${apps.length}] Error message: ${res.err.message}`);
+        if ('code' in res.err && res.err.code) {
+          core.info(`[${index + 1}/${apps.length}] Error code: ${res.err.code}`);
+        }
+      }
+
       if (res.stdout) {
+        core.info(`[${index + 1}/${apps.length}] Found diff for ${app.metadata.name}`);
         diffs.push({ app, diff: res.stdout });
       } else {
+        core.info(
+          `[${index + 1}/${apps.length}] No diff, recording error for ${app.metadata.name}`
+        );
         diffs.push({
           app,
           diff: '',
