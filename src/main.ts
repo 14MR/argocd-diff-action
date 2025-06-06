@@ -162,21 +162,47 @@ export async function run(): Promise<void> {
       return [];
     }
     const apps = responseJson.items as App[];
+    core.info(`Total apps fetched: ${apps.length}`);
+
     const repoApps = apps.filter(app => {
       const targetRevision = app.spec.source.targetRevision;
       const targetPrimary =
         targetRevision === 'master' || targetRevision === 'main' || !targetRevision;
-      return (
-        app.spec.source.repoURL.includes(
-          `${github.context.repo.owner}/${github.context.repo.repo}`
-        ) && targetPrimary
+      const isRepoMatch = app.spec.source.repoURL.includes(
+        `${github.context.repo.owner}/${github.context.repo.repo}`
       );
+
+      core.info(
+        `App ${app.metadata.name}: repoURL=${app.spec.source.repoURL}, targetRevision=${targetRevision}, isRepoMatch=${isRepoMatch}, targetPrimary=${targetPrimary}`
+      );
+
+      return isRepoMatch && targetPrimary;
     });
 
-    const changedFiles = await getChangedFiles();
-    core.info(`Changed files: ${changedFiles.join(', ')}`);
+    core.info(`Apps matching repo: ${repoApps.length}`);
+    core.info(`Repo filter: ${github.context.repo.owner}/${github.context.repo.repo}`);
+
+    let changedFiles: string[];
+    try {
+      changedFiles = await getChangedFiles();
+      core.info(`Changed files: ${changedFiles.join(', ')}`);
+    } catch (error) {
+      core.error(`Error getting changed files: ${error}`);
+      core.setFailed(`Failed to get changed files: ${error}`);
+      return [];
+    }
+
     const appsAffected = repoApps.filter(partOfApp.bind(null, changedFiles));
-    return filterAppsByName(appsAffected, APP_NAME_MATCHER);
+    core.info(`Apps affected by changes: ${appsAffected.length}`);
+    for (const app of appsAffected) {
+      core.info(`Affected app: ${app.metadata.name} (path: ${app.spec.source.path})`);
+    }
+
+    const finalApps = filterAppsByName(appsAffected, APP_NAME_MATCHER);
+    core.info(`Final filtered apps: ${finalApps.length}`);
+    core.info(`App name matcher: "${APP_NAME_MATCHER}"`);
+
+    return finalApps;
   }
 
   async function postDiffComment(diffs: Diff[]): Promise<void> {
