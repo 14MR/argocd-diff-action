@@ -1,10 +1,10 @@
 import * as core from '@actions/core';
+import * as github from '@actions/github';
 import * as tc from '@actions/tool-cache';
 import { exec, ExecException, ExecOptions } from 'child_process';
-import * as github from '@actions/github';
 import fs from 'fs';
-import path from 'path';
 import nodeFetch from 'node-fetch';
+import path from 'path';
 
 interface ExecResult {
   err?: Error;
@@ -107,18 +107,57 @@ export async function run(): Promise<void> {
     const protocol = PLAINTEXT ? 'http' : 'https';
     const url = `${protocol}://${ARGOCD_SERVER_URL}/api/v1/applications`;
     core.info(`Fetching apps from: ${url}`);
+    core.info(`Using protocol: ${protocol}`);
+    core.info(`PLAINTEXT setting: ${PLAINTEXT}`);
+    core.info(`ARGOCD_SERVER_URL: ${ARGOCD_SERVER_URL}`);
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let responseJson: any;
+    let response: any;
     try {
-      const response = await nodeFetch(url, {
+      const requestHeaders = { Cookie: `argocd.token=${ARGOCD_TOKEN}` };
+      core.info(`Request headers: ${JSON.stringify({ Cookie: 'argocd.token=***' })}`);
+
+      response = await nodeFetch(url, {
         method: 'GET',
-        headers: { Cookie: `argocd.token=${ARGOCD_TOKEN}` }
+        headers: requestHeaders
       });
-      responseJson = await response.json();
-    } catch (e) {
-      if (e instanceof Error || typeof e === 'string') {
-        core.setFailed(e);
+
+      core.info(`Response status: ${response.status} ${response.statusText}`);
+      core.info(`Response headers: ${JSON.stringify(Object.fromEntries(response.headers))}`);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        core.error(`HTTP Error ${response.status}: ${response.statusText}`);
+        core.error(`Response body: ${errorText}`);
+        core.setFailed(
+          `Failed to fetch applications: HTTP ${response.status} ${response.statusText}`
+        );
+        return [];
       }
+
+      const responseText = await response.text();
+      core.info(`Response body length: ${responseText.length} characters`);
+
+      try {
+        responseJson = JSON.parse(responseText);
+        core.info(
+          `Successfully parsed JSON response with ${responseJson.items?.length || 0} items`
+        );
+      } catch (jsonError) {
+        core.error(`Failed to parse JSON response: ${jsonError}`);
+        core.error(`Response text (first 500 chars): ${responseText.substring(0, 500)}`);
+        core.setFailed(`Invalid JSON response from ArgoCD API`);
+        return [];
+      }
+    } catch (e) {
+      core.error(`Network or request error: ${e}`);
+      if (e instanceof Error) {
+        core.error(`Error name: ${e.name}`);
+        core.error(`Error message: ${e.message}`);
+        core.error(`Error stack: ${e.stack}`);
+      }
+      core.setFailed(`Failed to connect to ArgoCD server: ${e}`);
       return [];
     }
     const apps = responseJson.items as App[];
