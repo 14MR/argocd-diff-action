@@ -304,13 +304,30 @@ _Updated at ${new Date().toLocaleString('en-US', { timeZone: 'America/Los_Angele
     const { owner, repo } = github.context.repo;
     const pull_number = github.context.issue.number;
 
-    const listFilesResponse = await octokit.rest.pulls.listFiles({
-      owner,
-      repo,
-      pull_number
-    });
+    core.info(`GitHub context - owner: ${owner}, repo: ${repo}`);
+    core.info(`Pull request number: ${pull_number}`);
+    core.info(`GitHub context payload: ${JSON.stringify(github.context.payload, null, 2)}`);
+    core.info(`GitHub context eventName: ${github.context.eventName}`);
+    core.info(`GitHub context ref: ${github.context.ref}`);
+    core.info(`GitHub context sha: ${github.context.sha}`);
 
-    return listFilesResponse.data.map(file => file.filename);
+    try {
+      const listFilesResponse = await octokit.rest.pulls.listFiles({
+        owner,
+        repo,
+        pull_number
+      });
+
+      core.info(`Successfully fetched ${listFilesResponse.data.length} changed files`);
+      return listFilesResponse.data.map(file => file.filename);
+    } catch (error) {
+      core.error(`GitHub API error details: ${JSON.stringify(error, null, 2)}`);
+      if (error instanceof Error) {
+        core.error(`Error name: ${error.name}`);
+        core.error(`Error message: ${error.message}`);
+      }
+      throw error;
+    }
   }
 
   function partOfApp(changedFiles: string[], app: App): boolean {
