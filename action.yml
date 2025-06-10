@@ -1,30 +1,30 @@
-name: 'ArgoCD Diff'
-description: 'Diffs all ArgoCD apps in the repo, and provides the diff as a PR comment'
-author: 'Quizlet'
+name: "ArgoCD Diff"
+description: "Diffs all ArgoCD apps in the repo, and provides the diff as a PR comment"
+author: "Quizlet"
 inputs:
-  argocd-server-url: 
+  argocd-server-url:
     description: ArgoCD server url (without the protocol)
     default: argo-cd-argocd-server.argo-cd
     required: false
-  argocd-token: 
+  argocd-token:
     description: ArgoCD token for a local or project-scoped user https://argoproj.github.io/argo-cd/operator-manual/user-management/#local-usersaccounts-v15
     required: true
-  argocd-version: 
+  argocd-version:
     description: ArgoCD Version
     default: v1.6.1
     required: false
-  github-token: 
+  github-token:
     description: Github Token
     required: true
-  argocd-extra-cli-args: 
+  argocd-extra-cli-args:
     description: Extra arguments to pass to the argocd CLI
     default: --grpc-web
     required: false
-  plaintext: 
+  plaintext:
     description: Whether to use HTTPS
-    default: 'false'
+    default: "false"
     required: false
-  environment: 
+  environment:
     description: Name of env to use in the diff title posted to the PR
     default: legacy
     required: false
@@ -32,6 +32,10 @@ inputs:
     description: Comma-separated list or '/'-delimited regex of app names to include in diff output
     default: ""
     required: false
+  delay-between-apps:
+    description: Delay in milliseconds between processing each app (to reduce ArgoCD server pressure)
+    default: "2000"
+    required: false
 runs:
-  using: 'node20'
-  main: 'dist/index.js'
+  using: "node20"
+  main: "dist/index.js"

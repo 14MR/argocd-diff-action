@@ -83,6 +83,7 @@ function run() {
         const ENV = core.getInput('environment');
         const PLAINTEXT = core.getInput('plaintext').toLowerCase() === 'true';
         const APP_NAME_MATCHER = core.getInput('app-name-matcher');
+        const DELAY_BETWEEN_APPS = parseInt(core.getInput('delay-between-apps') || '2000', 10);
         let EXTRA_CLI_ARGS = core.getInput('argocd-extra-cli-args');
         if (PLAINTEXT) {
             EXTRA_CLI_ARGS += ' --plaintext';
@@ -111,6 +112,9 @@ function run() {
                 output = output.replace(new RegExp(authTokenMatches[1], 'g'), '***');
             }
             return output;
+        }
+        function sleep(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
         }
         function setupArgoCDCommand() {
             return __awaiter(this, void 0, void 0, function* () {
@@ -342,6 +346,7 @@ _Updated at ${new Date().toLocaleString('en-US', { timeZone: 'America/Los_Angele
         const argocd = yield setupArgoCDCommand();
         const apps = yield getApps();
         core.info(`Found apps: ${apps.map(a => a.metadata.name).join(', ')}`);
+        core.info(`Delay between apps: ${DELAY_BETWEEN_APPS}ms`);
         // Log detailed info about each app
         for (const app of apps) {
             core.info(`App: ${app.metadata.name}`);
@@ -388,6 +393,11 @@ _Updated at ${new Date().toLocaleString('en-US', { timeZone: 'America/Los_Angele
                         error: res
                     });
                 }
+            }
+            // Add delay between apps to reduce server pressure (except after the last app)
+            if (index < apps.length - 1) {
+                core.info(`[${index + 1}/${apps.length}] Waiting ${DELAY_BETWEEN_APPS}ms before processing next app...`);
+                yield sleep(DELAY_BETWEEN_APPS);
             }
         }));
         yield postDiffComment(diffs);
