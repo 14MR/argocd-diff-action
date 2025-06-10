@@ -74,6 +74,7 @@ function filterAppsByName(appsAffected, appNameMatcher) {
 }
 function run() {
     return __awaiter(this, void 0, void 0, function* () {
+        var _a;
         const ARCH = process.env.ARCH || 'linux';
         const githubToken = core.getInput('github-token');
         core.info(githubToken);
@@ -84,6 +85,7 @@ function run() {
         const PLAINTEXT = core.getInput('plaintext').toLowerCase() === 'true';
         const APP_NAME_MATCHER = core.getInput('app-name-matcher');
         const DELAY_BETWEEN_APPS = parseInt(core.getInput('delay-between-apps') || '2000', 10);
+        const FAIL_ON_ERRORS = core.getInput('fail-on-errors').toLowerCase() !== 'false';
         let EXTRA_CLI_ARGS = core.getInput('argocd-extra-cli-args');
         if (PLAINTEXT) {
             EXTRA_CLI_ARGS += ' --plaintext';
@@ -402,8 +404,32 @@ _Updated at ${new Date().toLocaleString('en-US', { timeZone: 'America/Los_Angele
         }));
         yield postDiffComment(diffs);
         const diffsWithErrors = diffs.filter(d => d.error);
-        if (diffsWithErrors.length) {
-            core.setFailed(`ArgoCD diff failed: Encountered ${diffsWithErrors.length} errors`);
+        const diffsWithChanges = diffs.filter(d => d.diff && d.diff.trim() !== '');
+        const successfulDiffs = diffs.filter(d => !d.error);
+        core.info(`=== Summary ===`);
+        core.info(`Total apps processed: ${diffs.length}`);
+        core.info(`Successful: ${successfulDiffs.length}`);
+        core.info(`With diffs: ${diffsWithChanges.length}`);
+        core.info(`With errors: ${diffsWithErrors.length}`);
+        if (diffsWithErrors.length > 0) {
+            core.warning(`ArgoCD diff completed with ${diffsWithErrors.length} errors, but ${successfulDiffs.length} apps processed successfully`);
+            // List the failed apps for debugging
+            for (const diff of diffsWithErrors) {
+                core.warning(`Failed app: ${diff.app.metadata.name} - ${((_a = diff.error) === null || _a === void 0 ? void 0 : _a.stderr) || 'Unknown error'}`);
+            }
+            // Only fail the action based on configuration and error severity
+            if (FAIL_ON_ERRORS && diffsWithErrors.length === diffs.length) {
+                core.setFailed(`ArgoCD diff failed: All ${diffsWithErrors.length} apps encountered errors`);
+            }
+            else if (FAIL_ON_ERRORS) {
+                core.setFailed(`ArgoCD diff failed: Encountered ${diffsWithErrors.length} errors out of ${diffs.length} apps`);
+            }
+            else {
+                core.warning(`Continuing despite ${diffsWithErrors.length} errors since ${successfulDiffs.length} apps succeeded`);
+            }
+        }
+        else {
+            core.info(`ArgoCD diff completed successfully for all ${diffs.length} apps`);
         }
     });
 }

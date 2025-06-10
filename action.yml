@@ -36,6 +36,10 @@ inputs:
     description: Delay in milliseconds between processing each app (to reduce ArgoCD server pressure)
     default: "2000"
     required: false
+  fail-on-errors:
+    description: Whether to fail the action when some apps have errors (set to 'false' to allow posting comments despite errors)
+    default: "false"
+    required: false
 runs:
   using: "node20"
   main: "dist/index.js"
