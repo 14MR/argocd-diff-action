@@ -224,7 +224,7 @@ function run() {
                     diff.diff = filterDiff(diff.diff);
                     return diff;
                 })
-                    .filter(d => d.diff !== '');
+                    .filter(d => d.diff !== '' || d.error); // Include apps with diffs OR errors
                 const prefixHeader = `## ArgoCD Diff on ${ENV}`;
                 const diffOutput = filteredDiffs.map(({ app, diff, error }) => `
 App: [\`${app.metadata.name}\`](${protocol}://${ARGOCD_SERVER_URL}/applications/${app.metadata.name})
@@ -255,10 +255,20 @@ ${diff}
                     : ''}
 ---
 `);
+                const appsWithDiffs = filteredDiffs.filter(d => d.diff && d.diff.trim() !== '');
+                const appsWithErrors = filteredDiffs.filter(d => d.error);
+                const appsSuccessful = filteredDiffs.filter(d => !d.error);
+                const summary = `
+**Summary:** ${filteredDiffs.length} app(s) processed
+- ✅ ${appsSuccessful.length} successful (${appsWithDiffs.length} with diffs)
+- 🛑 ${appsWithErrors.length} failed${appsWithErrors.length > 0 ? ` (${appsWithErrors.map(d => d.app.metadata.name).join(', ')})` : ''}
+`;
                 const output = scrubSecrets(`
 ${prefixHeader} for commit [\`${shortCommitSha}\`](${commitLink})
 _Updated at ${new Date().toLocaleString('en-US', { timeZone: 'America/Los_Angeles' })} PT_
-  ${diffOutput.join('\n')}
+
+${summary}
+${diffOutput.join('\n')}
 
 | Legend | Status |
 | :---:  | :---   |
@@ -282,14 +292,18 @@ _Updated at ${new Date().toLocaleString('en-US', { timeZone: 'America/Los_Angele
                         });
                     }
                 }
-                // Only post a new comment when there are changes
+                // Post a comment when there are changes or errors to report
                 if (filteredDiffs.length) {
+                    core.info(`Posting comment with ${filteredDiffs.length} apps (diffs and/or errors)`);
                     octokit.rest.issues.createComment({
                         issue_number: github.context.issue.number,
                         owner,
                         repo,
                         body: output
                     });
+                }
+                else {
+                    core.info(`No diffs or errors to report - skipping comment`);
                 }
             });
         }
