@@ -6,6 +6,9 @@ inputs:
     description: ArgoCD server url (without the protocol)
     default: argo-cd-argocd-server.argo-cd
     required: false
+  argocd-public-url:
+    description: ArgoCD public URL for PR comment links (defaults to argocd-server-url if not specified)
+    required: false
   argocd-token:
     description: ArgoCD token for a local or project-scoped user https://argoproj.github.io/argo-cd/operator-manual/user-management/#local-usersaccounts-v15
     required: true

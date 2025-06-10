@@ -53,6 +53,7 @@ export async function run(): Promise<void> {
   core.info(githubToken);
 
   const ARGOCD_SERVER_URL = core.getInput('argocd-server-url');
+  const ARGOCD_PUBLIC_URL = core.getInput('argocd-public-url') || ARGOCD_SERVER_URL;
   const ARGOCD_TOKEN = core.getInput('argocd-token');
   const VERSION = core.getInput('argocd-version');
   const ENV = core.getInput('environment');
@@ -212,7 +213,6 @@ export async function run(): Promise<void> {
   }
 
   async function postDiffComment(diffs: Diff[]): Promise<void> {
-    const protocol = PLAINTEXT ? 'http' : 'https';
     const { owner, repo } = github.context.repo;
     const sha = github.context.payload.pull_request?.head?.sha;
 
@@ -224,12 +224,25 @@ export async function run(): Promise<void> {
         diff.diff = filterDiff(diff.diff);
         return diff;
       })
-      .filter(d => d.diff !== '' || d.error); // Include apps with diffs OR errors
+      .filter(d => d.diff !== '' || d.error) // Include apps with diffs OR errors
+      .sort((a, b) => {
+        // If one has an error and the other doesn't, put error last
+        if (a.error && !b.error) return 1;
+        if (b.error && !a.error) return -1;
+
+        // Otherwise sort by app name
+        return a.app.metadata.name.localeCompare(b.app.metadata.name);
+      });
 
     const prefixHeader = `## ArgoCD Diff on ${ENV}`;
+    const publicProtocol = ARGOCD_PUBLIC_URL.includes('://')
+      ? ''
+      : PLAINTEXT
+        ? 'http://'
+        : 'https://';
     const diffOutput = filteredDiffs.map(
       ({ app, diff, error }) => `
-App: [\`${app.metadata.name}\`](${protocol}://${ARGOCD_SERVER_URL}/applications/${
+App: [\`${app.metadata.name}\`](${publicProtocol}${ARGOCD_PUBLIC_URL}/applications/${
         app.metadata.name
       })
 YAML generation: ${error ? ' Error 🛑' : 'Success 🟢'}
@@ -237,6 +250,10 @@ App sync status: ${app.status.sync.status === 'Synced' ? 'Synced ✅' : 'Out of 
 ${
   error
     ? `
+
+<details>
+<summary>🛑 Error Details</summary>
+
 **\`stderr:\`**
 \`\`\`
 ${error.stderr}
@@ -246,6 +263,8 @@ ${error.stderr}
 \`\`\`json
 ${JSON.stringify(error.err)}
 \`\`\`
+
+</details>
 `
     : ''
 }
